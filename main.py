@@ -116,5 +116,15 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="User already registered")
     return user
 
-# TODO: Write GET OPERATION: The GET request should return failed login origins that meet certain thresholds (N failed logins in the last X
-#                            minutes for a tenant). The GET request should support pagination and should be sortable.
+# GET OPERATION: check for suspicious logins
+@app.get("/suspicious/", response_model=list[SuspiciousItem])
+def get_suspicious_logins(tenant_id: str, db: Session = Depends(get_db)):
+    # query to get the suspicious logins
+    suspicious_logins = (
+        db.query(Event.origin, func.count(Event.origin).label("count"))
+        .filter(Event.tenant_id == tenant_id) # filter by tenant_id
+        .group_by(Event.origin) # group by origin
+        .having(func.count(Event.origin) > 1) # check count > 1
+        .all() # return all results
+    )
+    return [SuspiciousItem(origin=origin, count=count) for origin, count in suspicious_logins]
