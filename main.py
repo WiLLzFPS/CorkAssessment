@@ -1,8 +1,8 @@
 # imports
 from sqlite3 import IntegrityError
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Enum, UniqueConstraint, func, create_engine
+from sqlalchemy import ForeignKey, create_engine, Column, Integer, String, DateTime, UniqueConstraint, func, create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, relationship
 from pydantic import BaseModel
 
 from fastapi import FastAPI, Depends, HTTPException
@@ -28,6 +28,28 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     email = Column(String, unique=True, index=True)
+
+    # backref from Event
+    events = relationship("Event", back_populates="user")
+
+# events table for multi-tenancy
+class Event(Base):
+    __tablename__ = "events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False) # FK connect to users table
+    origin = Column(String, nullable=False)
+    timestamp = Column(DateTime(timezone=True), nullable=False)
+    idempotency_key = Column(String, nullable=False)
+
+    # make sure all combinations of tenant_id and idempotency_key are unique
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key", name="uq_tenant_idempotency"),
+    )
+
+    # backref from User
+    user = relationship("User", back_populates="events")
 
 # create the database tables
 Base.metadata.create_all(bind=engine)
@@ -66,3 +88,6 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=400, detail="User already registered")
     return user
+
+# TODO: Write GET OPERATION: The GET request should return failed login origins that meet certain thresholds (N failed logins in the last X
+#                            minutes for a tenant). The GET request should support pagination and should be sortable.
