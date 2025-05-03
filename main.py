@@ -1,7 +1,9 @@
 # imports
 import datetime
 from sqlite3 import IntegrityError
-from sqlalchemy import ForeignKey, create_engine, Column, Integer, String, DateTime, UniqueConstraint, func, create_engine
+from typing import Literal
+from enum import Enum as PyEnum
+from sqlalchemy import Enum as SAEnum, ForeignKey, create_engine, Column, Integer, String, DateTime, UniqueConstraint, func, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from pydantic import BaseModel, Field
@@ -33,6 +35,11 @@ class User(Base):
     # backref from Event
     events = relationship("Event", back_populates="user")
 
+# model for login status
+class LoginStatus(str, PyEnum):
+    success = "success"
+    failure = "failure"
+
 # events table for multi-tenancy
 class Event(Base):
     __tablename__ = "events"
@@ -43,6 +50,7 @@ class Event(Base):
     origin = Column(String, nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False)
     idempotency_key = Column(String, nullable=False)
+    status = Column(SAEnum(LoginStatus), nullable=False)
 
     # make sure all combinations of tenant_id and idempotency_key are unique
     __table_args__ = (
@@ -59,6 +67,15 @@ class EventCreate(BaseModel):
     origin: str = Field(...)
     timestamp: datetime.datetime
     idempotency_key: str
+    status: Literal["success", "failure"]
+
+class EventRead(EventCreate):
+    id: int
+
+# create a model for event response
+class SuspiciousItem(BaseModel):
+    origin: str
+    count: int
 
 # create the database tables
 Base.metadata.create_all(bind=engine)
@@ -70,6 +87,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 
 class UserCreate(BaseModel):
