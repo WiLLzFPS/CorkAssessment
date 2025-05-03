@@ -1,9 +1,10 @@
 # imports
+import datetime
 from sqlite3 import IntegrityError
 from sqlalchemy import ForeignKey, create_engine, Column, Integer, String, DateTime, UniqueConstraint, func, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from fastapi import FastAPI, Depends, HTTPException
 
@@ -50,6 +51,14 @@ class Event(Base):
 
     # backref from User
     user = relationship("User", back_populates="events")
+
+# create a pydantic model for the event
+class EventCreate(BaseModel):
+    tenant_id: str = Field(...) # ... means required
+    user_id: int = Field(...)
+    origin: str = Field(...)
+    timestamp: datetime.datetime
+    idempotency_key: str
 
 # create the database tables
 Base.metadata.create_all(bind=engine)
